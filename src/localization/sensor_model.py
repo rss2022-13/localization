@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 from scan_simulator_2d import PyScanSimulator2D
 
 import rospy
@@ -19,18 +20,19 @@ class SensorModel:
         ####################################
         # TODO
         # Adjust these parameters
-        self.alpha_hit = 0
-        self.alpha_short = 0
-        self.alpha_max = 0
-        self.alpha_rand = 0
-        self.sigma_hit = 0
+        self.alpha_hit = 0.74
+        self.alpha_short = 0.07
+        self.alpha_max = 0.07
+        self.alpha_rand = 0.12
+        self.sigma_hit = 8.0
+        self.z_max = 200
 
         # Your sensor table will be a `table_width` x `table_width` np array:
         self.table_width = 201
         ####################################
 
         # Precompute the sensor model table
-        self.sensor_model_table = None
+        self.sensor_model_table = np.zeros((self.table_width, self.table_width))
         self.precompute_sensor_model()
 
         # Create a simulated laser scan
@@ -49,6 +51,26 @@ class SensorModel:
                 OccupancyGrid,
                 self.map_callback,
                 queue_size=1)
+    
+    def calc_prob(self, z, d):
+        phit = 0.0
+        pshort = 0.0
+        pmax = 0.0
+        pmax = 0.0
+
+        # MAKE SURE TO CHANGE z_max to the real value
+        if 0 <= z <= self.z_max:
+            phit = 1.0/(np.sqrt(2*np.pi*self.sigma_hit**2)) * np.exp(-(z-d)**2/(2*self.sigma_hit**2))
+            prand = 1.0/self.z_max
+
+        if 0 <= z <= d:
+            pshort = 2.0/d*(1-z/d)
+
+        if z == self.z_max:
+            pmax = 1.0
+
+        
+        return self.alpha_short * pshort + self.alpha_max * pmax + self.alpha_rand * prand, phit
 
     def precompute_sensor_model(self):
         """
@@ -69,7 +91,41 @@ class SensorModel:
         returns:
             No return type. Directly modify `self.sensor_model_table`.
         """
-        raise NotImplementedError
+        p_hits = np.zeros((self.table_width,))
+        
+        for d in range(self.z_max+1):
+            for z in range(self.z_max+1):
+                #calculate probability initially
+                self.sensor_model_table[d,z], p_hits[z] = self.calc_prob(z,d)
+
+            #normalize p_hit values if not normal
+            if np.sum(p_hits) != 1:
+                p_hits = np.divide(p_hits,np.sum(p_hits))
+
+            #use normalized vals to compute probabilities
+            p_hits = p_hits * self.alpha_hit
+
+            #add these probabilities to the current values
+            self.sensor_model_table[d:d+1,:] = np.add(self.sensor_model_table[d:d+1,:],p_hits)
+        
+        #once all probabilities filled, need to normalize each row
+        for d in range(self.z_max+1):
+            if np.sum(self.sensor_model_table[d:d+1,:]) != 1:
+                self.sensor_model_table[d:d+1,:] = np.divide(self.sensor_model_table[d:d+1,:],np.sum(self.sensor_model_table[d:d+1,:]))
+
+        fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+
+        # Make data.
+        X = np.arange(0, 200, 1)
+        Y = np.arange(0, 200, 1)
+        X, Y = np.meshgrid(X, Y)
+
+        # Plot the surface.
+        surf = ax.plot_surface(X, Y, self.sensor_model_table, linewidth=0, antialiased=False)
+
+        plt.show()
+                
+
 
     def evaluate(self, particles, observation):
         """
@@ -135,3 +191,8 @@ class SensorModel:
         self.map_set = True
 
         print("Map initialized")
+
+
+test = SensorModel()
+
+test.precompute_sensor_model()
