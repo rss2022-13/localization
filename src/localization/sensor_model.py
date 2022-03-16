@@ -191,8 +191,3 @@ class SensorModel:
         self.map_set = True
 
         print("Map initialized")
-
-
-test = SensorModel()
-
-test.precompute_sensor_model()
