@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 from scan_simulator_2d import PyScanSimulator2D
 
 import rospy
@@ -63,7 +64,7 @@ class SensorModel:
             phit = 1.0/(np.sqrt(2*np.pi*self.sigma_hit**2)) * np.exp(-(z-d)**2/(2*self.sigma_hit**2))
             prand = 1.0/self.z_max
 
-        if 0 <= z <= d:
+        if 0 <= z <= d and d != 0:
             pshort = 2.0/d*(1-z/d)
 
         if z == self.z_max:
@@ -116,8 +117,8 @@ class SensorModel:
         fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
 
         # Make data.
-        X = np.arange(0, 200, 1)
-        Y = np.arange(0, 200, 1)
+        X = np.arange(0, 201, 1)
+        Y = np.arange(0, 201, 1)
         X, Y = np.meshgrid(X, Y)
 
         # Plot the surface.
