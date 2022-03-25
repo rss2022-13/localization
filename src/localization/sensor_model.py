@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 from scan_simulator_2d import PyScanSimulator2D
 
 import rospy
@@ -175,8 +176,10 @@ class SensorModel:
         #get probabilities by indexing into the precomputed table via values of simulated and real scans
         probabilities = self.sensor_model_table[lidar_scan, scans]
 
+        # raise TypeError("Shape: {0}".format(np.prod(probabilities, axis=0).shape[0]))
+
         # take the product of each point's probabilities to get the total probability for each point
-        return np.prod(probabilities, axis=0)**(1/2.2)
+        return np.prod(probabilities, axis=1)**(1/2.2)
 
 
 
