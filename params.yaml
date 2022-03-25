@@ -21,5 +21,8 @@ odom_topic: "/odom"
 # The frame you should publish your transform to
 particle_filter_frame: "/base_link_pf"
 
+# For converting from meters to pixels
+lidar_scale_to_map_scale: 1.0
+
 # Deterministic flag; set to true to remove all added noise
 deterministic: true

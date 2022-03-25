@@ -44,6 +44,8 @@ class SensorModel:
                 self.scan_theta_discretization) 
 
         # Subscribe to the map
+        self.map_resolution = None
+        self.scale = rospy.get_param("~lidar_scale_to_map_scale")
         self.map = None
         self.map_set = False
         rospy.Subscriber(
@@ -58,12 +60,11 @@ class SensorModel:
         pmax = 0.0
         pmax = 0.0
 
-        # MAKE SURE TO CHANGE z_max to the real value
         if 0 <= z <= self.z_max:
             phit = 1.0/(np.sqrt(2*np.pi*self.sigma_hit**2)) * np.exp(-(z-d)**2/(2*self.sigma_hit**2))
             prand = 1.0/self.z_max
 
-        if 0 <= z <= d:
+        if 0 <= z <= d and d != 0:
             pshort = 2.0/d*(1-z/d)
 
         if z == self.z_max:
@@ -96,7 +97,7 @@ class SensorModel:
         for d in range(self.z_max+1):
             for z in range(self.z_max+1):
                 #calculate probability initially
-                self.sensor_model_table[d,z], p_hits[z] = self.calc_prob(z,d)
+                self.sensor_model_table[d,z], p_hits[z] = self.calc_prob(float(z),float(d))
 
             #normalize p_hit values if not normal
             if np.sum(p_hits) != 1:
@@ -110,20 +111,12 @@ class SensorModel:
         
         #once all probabilities filled, need to normalize each row
         for d in range(self.z_max+1):
-            if np.sum(self.sensor_model_table[d:d+1,:]) != 1:
+            if float(np.sum(self.sensor_model_table[d:d+1,:])) != 1:
                 self.sensor_model_table[d:d+1,:] = np.divide(self.sensor_model_table[d:d+1,:],np.sum(self.sensor_model_table[d:d+1,:]))
 
-        fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+        # flipping it because they want it the other way around
+        self.sensor_model_table = self.sensor_model_table.T
 
-        # Make data.
-        X = np.arange(0, 200, 1)
-        Y = np.arange(0, 200, 1)
-        X, Y = np.meshgrid(X, Y)
-
-        # Plot the surface.
-        surf = ax.plot_surface(X, Y, self.sensor_model_table, linewidth=0, antialiased=False)
-
-        plt.show()
                 
 
 
@@ -136,7 +129,7 @@ class SensorModel:
             particles: An Nx3 matrix of the form:
             
                 [x0 y0 theta0]
-                [x1 y0 theta1]
+                [x1 y1 theta1]
                 [    ...     ]
 
             observation: A vector of lidar data measured
@@ -151,6 +144,9 @@ class SensorModel:
         if not self.map_set:
             return
 
+        # first want to downsample the lidar scan to the same number of beams as the ray casting
+        lidar_scan = observation
+
         ####################################
         # TODO
         # Evaluate the sensor model here!
@@ -160,13 +156,37 @@ class SensorModel:
         # This produces a matrix of size N x num_beams_per_particle 
 
         scans = self.scan_sim.scan(particles)
+        #these are the d values, which we are going to get probabilities using the observation
 
         ####################################
+
+        # converting simulated and real scans to px instead of meters
+        scans = np.divide(scans , (self.map_resolution * self.scale))
+        lidar_scan = np.divide(lidar_scan, (self.map_resolution * self.scale))
+
+        # discretizing lidar_scan and simulated scan
+        lidar_scan = lidar_scan.astype(int)
+        scans = scans.astype(int)
+
+        # clipping both scans so that they lie in the correct range
+        scans = np.clip(scans, 0, self.z_max)
+        lidar_scan = np.clip(lidar_scan, 0, self.z_max)
+
+        #get probabilities by indexing into the precomputed table via values of simulated and real scans
+        probabilities = self.sensor_model_table[lidar_scan, scans]
+
+        # take the product of each point's probabilities to get the total probability for each point
+        return np.prod(probabilities, axis=0)**(1/2.2)
+
+
+
+        
 
     def map_callback(self, map_msg):
         # Convert the map to a numpy array
         self.map = np.array(map_msg.data, np.double)/100.
         self.map = np.clip(self.map, 0, 1)
+        self.map_resolution = map_msg.info.resolution
 
         # Convert the origin to a tuple
         origin_p = map_msg.info.origin.position
