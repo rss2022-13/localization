@@ -125,7 +125,6 @@ class ParticleFilter:
             self.particles = self.particles[np.random.choice(len(self.particles), len(self.particles), p=self.probs)]
             self.update_pose()
 
-
     def scan_callback(self,scan):
         if not self.particles_set:
             return
@@ -135,7 +134,7 @@ class ParticleFilter:
     def interpret_odometry(self,odom):
         with self._lock:
             self.particles = self.motion_model.evaluate(self.particles, odom)
-            self.update_pose()       
+            self.update_pose()    
 
     def motion_callback(self,odom):
         # TODO: Implement the motion model here

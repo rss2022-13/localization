@@ -46,7 +46,7 @@ class SensorModel:
 
         # Subscribe to the map
         self.map_resolution = None
-        self.scale = rospy.get_param("~lidar_scale_to_map_scale")
+        self.scale = rospy.get_param("~lidar_scale_to_map_scale", 1)
         self.map = None
         self.map_set = False
         rospy.Subscriber(
@@ -116,6 +116,7 @@ class SensorModel:
                 self.sensor_model_table[d:d+1,:] = np.divide(self.sensor_model_table[d:d+1,:],np.sum(self.sensor_model_table[d:d+1,:]))
 
         # flipping it because they want it the other way around
+        # This means the table is indexed via z,d 
         self.sensor_model_table = self.sensor_model_table.T
 
                 
@@ -156,27 +157,28 @@ class SensorModel:
         # to perform ray tracing from all the particles.
         # This produces a matrix of size N x num_beams_per_particle 
 
-        scans = self.scan_sim.scan(particles)
+        sim_scans = self.scan_sim.scan(particles)
         #these are the d values, which we are going to get probabilities using the observation
 
         ####################################
 
-        # converting simulated and real scans to px instead of meters
-        scans = np.divide(scans , (self.map_resolution * self.scale))
-        lidar_scan = np.divide(lidar_scan, (self.map_resolution * self.scale))
+        # converting simulated and real sim_scans to px instead of meters
+        sim_scans = np.divide(sim_scans , self.map_resolution * self.scale)
+        lidar_scan = np.divide(lidar_scan, self.map_resolution * self.scale)
 
         # discretizing lidar_scan and simulated scan
-        lidar_scan = lidar_scan.astype(int)
-        scans = scans.astype(int)
+        lidar_scan = np.round(lidar_scan).astype(int)
+        sim_scans = np.round(sim_scans).astype(int)
 
-        # clipping both scans so that they lie in the correct range
-        scans = np.clip(scans, 0, self.z_max)
+        # clipping both sim_scans so that they lie in the correct range
+        sim_scans = np.clip(sim_scans, 0, self.z_max)
         lidar_scan = np.clip(lidar_scan, 0, self.z_max)
 
-        #get probabilities by indexing into the precomputed table via values of simulated and real scans
-        probabilities = self.sensor_model_table[lidar_scan, scans]
+        #get probabilities by indexing into the precomputed table via values of simulated and real sim_scans
+        # Index via z,d
+        probabilities = self.sensor_model_table[lidar_scan, sim_scans]
 
-        # raise TypeError("Shape: {0}".format(np.prod(probabilities, axis=0).shape[0]))
+        # raise TypeError("Shape: {0}".format(probabilities.shape))
 
         # take the product of each point's probabilities to get the total probability for each point
         return np.prod(probabilities, axis=1)**(1/2.2)
