@@ -1,4 +1,6 @@
 import numpy as np
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 from scan_simulator_2d import PyScanSimulator2D
 
 import rospy
@@ -19,18 +21,19 @@ class SensorModel:
         ####################################
         # TODO
         # Adjust these parameters
-        self.alpha_hit = 0
-        self.alpha_short = 0
-        self.alpha_max = 0
-        self.alpha_rand = 0
-        self.sigma_hit = 0
+        self.alpha_hit = 0.74
+        self.alpha_short = 0.07
+        self.alpha_max = 0.07
+        self.alpha_rand = 0.12
+        self.sigma_hit = 8.0
+        self.z_max = 200
 
         # Your sensor table will be a `table_width` x `table_width` np array:
         self.table_width = 201
         ####################################
 
         # Precompute the sensor model table
-        self.sensor_model_table = None
+        self.sensor_model_table = np.zeros((self.table_width, self.table_width))
         self.precompute_sensor_model()
 
         # Create a simulated laser scan
@@ -42,6 +45,8 @@ class SensorModel:
                 self.scan_theta_discretization) 
 
         # Subscribe to the map
+        self.map_resolution = None
+        self.scale = rospy.get_param("~lidar_scale_to_map_scale")
         self.map = None
         self.map_set = False
         rospy.Subscriber(
@@ -49,6 +54,25 @@ class SensorModel:
                 OccupancyGrid,
                 self.map_callback,
                 queue_size=1)
+    
+    def calc_prob(self, z, d):
+        phit = 0.0
+        pshort = 0.0
+        pmax = 0.0
+        pmax = 0.0
+
+        if 0 <= z <= self.z_max:
+            phit = 1.0/(np.sqrt(2*np.pi*self.sigma_hit**2)) * np.exp(-(z-d)**2/(2*self.sigma_hit**2))
+            prand = 1.0/self.z_max
+
+        if 0 <= z <= d and d != 0:
+            pshort = 2.0/d*(1-z/d)
+
+        if z == self.z_max:
+            pmax = 1.0
+
+        
+        return self.alpha_short * pshort + self.alpha_max * pmax + self.alpha_rand * prand, phit
 
     def precompute_sensor_model(self):
         """
@@ -69,7 +93,33 @@ class SensorModel:
         returns:
             No return type. Directly modify `self.sensor_model_table`.
         """
-        raise NotImplementedError
+        p_hits = np.zeros((self.table_width,))
+        
+        for d in range(self.z_max+1):
+            for z in range(self.z_max+1):
+                #calculate probability initially
+                self.sensor_model_table[d,z], p_hits[z] = self.calc_prob(float(z),float(d))
+
+            #normalize p_hit values if not normal
+            if np.sum(p_hits) != 1:
+                p_hits = np.divide(p_hits,np.sum(p_hits))
+
+            #use normalized vals to compute probabilities
+            p_hits = p_hits * self.alpha_hit
+
+            #add these probabilities to the current values
+            self.sensor_model_table[d:d+1,:] = np.add(self.sensor_model_table[d:d+1,:],p_hits)
+        
+        #once all probabilities filled, need to normalize each row
+        for d in range(self.z_max+1):
+            if float(np.sum(self.sensor_model_table[d:d+1,:])) != 1:
+                self.sensor_model_table[d:d+1,:] = np.divide(self.sensor_model_table[d:d+1,:],np.sum(self.sensor_model_table[d:d+1,:]))
+
+        # flipping it because they want it the other way around
+        self.sensor_model_table = self.sensor_model_table.T
+
+                
+
 
     def evaluate(self, particles, observation):
         """
@@ -80,7 +130,7 @@ class SensorModel:
             particles: An Nx3 matrix of the form:
             
                 [x0 y0 theta0]
-                [x1 y0 theta1]
+                [x1 y1 theta1]
                 [    ...     ]
 
             observation: A vector of lidar data measured
@@ -95,6 +145,9 @@ class SensorModel:
         if not self.map_set:
             return
 
+        # first want to downsample the lidar scan to the same number of beams as the ray casting
+        lidar_scan = observation
+
         ####################################
         # TODO
         # Evaluate the sensor model here!
@@ -104,13 +157,39 @@ class SensorModel:
         # This produces a matrix of size N x num_beams_per_particle 
 
         scans = self.scan_sim.scan(particles)
+        #these are the d values, which we are going to get probabilities using the observation
 
         ####################################
+
+        # converting simulated and real scans to px instead of meters
+        scans = np.divide(scans , (self.map_resolution * self.scale))
+        lidar_scan = np.divide(lidar_scan, (self.map_resolution * self.scale))
+
+        # discretizing lidar_scan and simulated scan
+        lidar_scan = lidar_scan.astype(int)
+        scans = scans.astype(int)
+
+        # clipping both scans so that they lie in the correct range
+        scans = np.clip(scans, 0, self.z_max)
+        lidar_scan = np.clip(lidar_scan, 0, self.z_max)
+
+        #get probabilities by indexing into the precomputed table via values of simulated and real scans
+        probabilities = self.sensor_model_table[lidar_scan, scans]
+
+        # raise TypeError("Shape: {0}".format(np.prod(probabilities, axis=0).shape[0]))
+
+        # take the product of each point's probabilities to get the total probability for each point
+        return np.prod(probabilities, axis=1)**(1/2.2)
+
+
+
+        
 
     def map_callback(self, map_msg):
         # Convert the map to a numpy array
         self.map = np.array(map_msg.data, np.double)/100.
         self.map = np.clip(self.map, 0, 1)
+        self.map_resolution = map_msg.info.resolution
 
         # Convert the origin to a tuple
         origin_p = map_msg.info.origin.position
