@@ -84,6 +84,7 @@ class ParticleFilter:
         self.particles = None
         self.particles_set = False
         self.num_particles = rospy.get_param("~num_particles", 200)
+        self.markers = None
 
     def update_pose(self):
         ''' 
@@ -100,35 +101,40 @@ class ParticleFilter:
 
         theta = circmean(self.particles[2, :])
 
-        poses = []
-        for p in self.particles:
-            pose = Marker()
+        n = self.particles.shape[1]
+        if not self.markers:
+            self.markers = [0]*n
+        for i in range(n):
+            pose = self.markers[i]
+            if not self.markers[i]:
+                pose = Marker()
             pose.header.frame_id = self.frame_id
             pose.type = Marker.CYLINDER
-            pose.action = Marker.ADD
+            #pose.action = Marker.ADD
             pose.scale.x = .1
             pose.scale.y = .1
             pose.scale.z = .1
             pose.color.a = 1.0
             pose.color.r = 1.0
             pose.color.g = .5
-            pose.pose.position.x = p[0]
-            pose.pose.position.y = p[1]
+            pose.pose.position.x = self.particles[0, i]
+            pose.pose.position.y = self.particles[1, i]
             pose.pose.position.z = 0
             
-            ori = quaternion_from_euler(0.0,0.0,p[2])
+            ori = quaternion_from_euler(0.0,0.0,self.particles[2, i])
             pose.pose.orientation.w = ori[3]
 
-            poses.append(pose)
+            self.markers[i] = pose
         
         visualization = MarkerArray()
-        visualization.markers = poses
+        visualization.markers = self.markers
 
 
         quaternion = quaternion_from_euler(0.0, 0.0, theta)
 
 
         self.odom_estimate.header.frame_id = self.frame_id
+        self.odom_estimate.header.stamp = rospy.Time.now()
         self.odom_estimate.pose.pose.orientation.x = quaternion[0]
         self.odom_estimate.pose.pose.orientation.y = quaternion[1]
         self.odom_estimate.pose.pose.orientation.z = quaternion[2]
@@ -153,6 +159,7 @@ class ParticleFilter:
         thetas = thetas.reshape((self.num_particles, 1))
 
         self.particles = np.hstack((x, y, thetas))
+        print(self.particles)
         self.particles_set = True
 
     # def scan_callback(self,scan):
@@ -180,8 +187,8 @@ class ParticleFilter:
 
     def interpret_odometry(self, odom):
         # with self._lock:
-        quat = [odom.pose.pose.orientation.x,odom.pose.pose.orientation.y,odom.pose.pose.orientation.z, odom.pose.pose.orientation.w]
-        vector = [odom.pose.pose.position.x, odom.pose.pose.position.y, euler_from_quaternion(quat)[2]]
+        #quat = [odom.pose.pose.orientation.x,odom.pose.pose.orientation.y,odom.pose.pose.orientation.z, odom.pose.pose.orientation.w]
+        vector = [odom.twist.twist.linear.x, odom.twist.twist.linear.y, odom.twist.twist.angular.z]
         self.particles = self.motion_model.evaluate(self.particles, vector)
         self.update_pose()
 
