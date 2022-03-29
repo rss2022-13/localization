@@ -8,7 +8,7 @@ from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseWithCovarianceStamped, PoseArray, Pose
 from tf.transformations import quaternion_from_euler, euler_from_quaternion, quaternion_matrix
-from visualization.msgs.msg import MarkerArray, Marker
+from visualization_msgs.msg import MarkerArray, Marker
 import numpy as np
 from scipy.stats import circmean
 # import threading
@@ -104,8 +104,8 @@ class ParticleFilter:
         for p in self.particles:
             pose = Marker()
             pose.header.frame_id = self.frame_id
-            pose.type = pose.CYLINDER
-            pose.action = pose.ADD
+            pose.type = Marker.CYLINDER
+            pose.action = Marker.ADD
             pose.scale.x = .1
             pose.scale.y = .1
             pose.scale.z = .1
@@ -117,7 +117,7 @@ class ParticleFilter:
             pose.pose.position.z = 0
             
             ori = quaternion_from_euler(0.0,0.0,p[2])
-            pose.orientation.w = ori[3]
+            pose.pose.orientation.w = ori[3]
 
             poses.append(pose)
         
