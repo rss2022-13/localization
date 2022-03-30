@@ -33,11 +33,11 @@ class ParticleFilter:
         #     a twist component, you will only be provided with the
         #     twist component, so you should rely only on that
         #     information, and *not* use the pose component.
-        #scan_topic = rospy.get_param("~scan_topic", "/scan")
+        scan_topic = rospy.get_param("~scan_topic", "/scan")
         odom_topic = rospy.get_param("~odom_topic", "/odom")
-        #self.laser_sub = rospy.Subscriber(scan_topic, LaserScan,
-                                    #      self.interpret_scan,
-                                     #     queue_size=1)
+        self.laser_sub = rospy.Subscriber(scan_topic, LaserScan,
+                                          self.interpret_scan,
+                                          queue_size=1)
         self.odom_sub = rospy.Subscriber(odom_topic, Odometry,
                                          self.interpret_odometry,
                                          queue_size=1)
@@ -61,7 +61,7 @@ class ParticleFilter:
         #     provide the twist part of the Odometry message. The
         #     odometry you publish here should be with respect to the
         #     "/map" frame.
-        self.odom_pub = rospy.Publisher("/base_link_pf", Odometry, queue_size=1)
+        self.odom_pub = rospy.Publisher("/pf/pose/odom", Odometry, queue_size=1)
         self.odom_estimate = Odometry()
         self.frame_id = "/map"
 
@@ -70,7 +70,7 @@ class ParticleFilter:
 
         # Initialize the models
         self.motion_model = MotionModel()
-        #self.sensor_model = SensorModel()
+        self.sensor_model = SensorModel()
         self.probs = None
         # Implement the MCL algorithm
         # using the sensor model and the motion model

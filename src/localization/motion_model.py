@@ -34,6 +34,7 @@ class MotionModel:
         return particles
 
     def noisy_evaluate(self, particles, odometry):
+        odometry = np.array(odometry)
         shape = (particles.shape[0], 1)
         noise_std = abs(odometry) * np.array(self.params)
         odometry_noisy = np.concatenate([np.random.normal(odometry[0], noise_std[0], shape),
