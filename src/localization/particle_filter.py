@@ -96,10 +96,10 @@ class ParticleFilter:
                 Could also use a MSE regression which essentially finds modes of the distribution
                     Would be definitely more time intensive unless I find a way to use fast libraries
         '''
-        x = np.mean(self.particles[0, :])
-        y = np.mean(self.particles[1, :])
+        x = np.mean(self.particles[:, 0])
+        y = np.mean(self.particles[:, 1])
 
-        theta = circmean(self.particles[2, :])
+        theta = circmean(self.particles[:, 2])
 
         n = self.particles.shape[0]
  
