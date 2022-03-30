@@ -147,7 +147,7 @@ class SensorModel:
             return
 
         # first want to downsample the lidar scan to the same number of beams as the ray casting
-        lidar_scan = observation
+        lidar_scan = observation[::int(len(observation)/self.num_beams_per_particle)]
 
         ####################################
         # TODO
@@ -173,11 +173,12 @@ class SensorModel:
         # clipping both sim_scans so that they lie in the correct range
         sim_scans = np.clip(sim_scans, 0, self.z_max)
         lidar_scan = np.clip(lidar_scan, 0, self.z_max)
-
+        #print('sim_scans:', sim_scans)
+        #print('lidar:', lidar_scan)
         #get probabilities by indexing into the precomputed table via values of simulated and real sim_scans
         # Index via z,d
         probabilities = self.sensor_model_table[lidar_scan, sim_scans]
-
+        #print('row of probs:', probabilities[0, :])
         # raise TypeError("Shape: {0}".format(probabilities.shape))
 
         # take the product of each point's probabilities to get the total probability for each point

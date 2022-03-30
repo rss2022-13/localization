@@ -9,7 +9,7 @@ class MotionModel:
         ####################################
         # Pre-computation
         self.deterministic = rospy.get_param("~deterministic")
-        self.params = [1.0, 1.0, 0.5]
+        self.params = [0.05, 0.05, 0.05, 0]
 
         ####################################
 
@@ -36,10 +36,12 @@ class MotionModel:
     def noisy_evaluate(self, particles, odometry):
         odometry = np.array(odometry)
         shape = (particles.shape[0], 1)
-        noise_std = abs(odometry) * np.array(self.params)
+        #noise_std = abs(odometry) * np.array(self.params)
+        noise_std = np.array(self.params)
+        
         odometry_noisy = np.concatenate([np.random.normal(odometry[0], noise_std[0], shape),
-                                        np.random.normal(odometry[1], noise_std[1], shape),
-                                        np.random.normal(odometry[2], noise_std[2], shape)], axis = 1)
+                                         np.random.normal(odometry[1], noise_std[1], shape),
+                                         np.random.normal(odometry[2], noise_std[2], shape)], axis = 1)
         
         x = particles[:,0]
         y = particles[:,1]
@@ -54,6 +56,10 @@ class MotionModel:
         particles[:,0] = x + dx
         particles[:,1] = y + dy
         particles[:,2] = theta + dtheta
+
+        #particles[:,0] += np.random.normal(0, noise_std[0], shape)
+        #particles[:,1] += np.random.normal(0, noise_std[1], shape)
+        #particles[:2] += np.random.normal(0, noise_std[2], shape)
 
         return particles
 

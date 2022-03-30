@@ -19,7 +19,13 @@ class ParticleFilter:
     # particles = None
 
     def __init__(self):
+        self.particles = None
+        self.particles_set = False
+        self.num_particles = rospy.get_param("~num_particles", 200)
+        self.markers = None
+        self.prev_time = None
         # Get parameters
+        
         self.particle_filter_frame = rospy.get_param("~particle_filter_frame")
 
         self.deterministic = rospy.get_param("~deterministic", True)
@@ -33,11 +39,11 @@ class ParticleFilter:
         #     a twist component, you will only be provided with the
         #     twist component, so you should rely only on that
         #     information, and *not* use the pose component.
-        #scan_topic = rospy.get_param("~scan_topic", "/scan")
+        scan_topic = rospy.get_param("~scan_topic", "/scan")
         odom_topic = rospy.get_param("~odom_topic", "/odom")
-        #self.laser_sub = rospy.Subscriber(scan_topic, LaserScan,
-         #                                 self.interpret_scan,
-          #                                queue_size=1)
+        self.laser_sub = rospy.Subscriber(scan_topic, LaserScan,
+                                         self.interpret_scan,
+                                        queue_size=1)
         self.odom_sub = rospy.Subscriber(odom_topic, Odometry,
                                          self.interpret_odometry,
                                          queue_size=1)
@@ -70,7 +76,7 @@ class ParticleFilter:
 
         # Initialize the models
         self.motion_model = MotionModel()
-        #self.sensor_model = SensorModel()
+        self.sensor_model = SensorModel()
         self.probs = None
         # Implement the MCL algorithm
         # using the sensor model and the motion model
@@ -81,10 +87,7 @@ class ParticleFilter:
         #
         # Publish a transformation frame between the map
         # and the particle_filter_frame.
-        self.particles = None
-        self.particles_set = False
-        self.num_particles = rospy.get_param("~num_particles", 200)
-        self.markers = None
+        
 
     def update_pose(self):
         ''' 
@@ -96,10 +99,10 @@ class ParticleFilter:
                 Could also use a MSE regression which essentially finds modes of the distribution
                     Would be definitely more time intensive unless I find a way to use fast libraries
         '''
-        x = np.mean(self.particles[0, :])
-        y = np.mean(self.particles[1, :])
+        x = np.mean(self.particles[:, 0])
+        y = np.mean(self.particles[:, 1])
 
-        theta = circmean(self.particles[2, :])
+        theta = circmean(self.particles[:, 2])
 
         n = self.particles.shape[0]
  
@@ -161,18 +164,30 @@ class ParticleFilter:
 
     def initialize_particles(self, pose):
         # sample regions of the map that allow us to place points, then uniformly distribute with random thetas
-        x = np.random.choice(np.linspace(
-            pose.pose.pose.position.x - 5, pose.pose.pose.position.x + 5, 30), self.num_particles)
-        x = x.reshape((self.num_particles, 1))
-        y = np.random.choice(np.linspace(
-            pose.pose.pose.position.y - 5, pose.pose.pose.position.y + 5, 30), self.num_particles)
-        y = y.reshape((self.num_particles, 1))
+        # x = np.random.choice(np.linspace(
+        #     pose.pose.pose.position.x - 1, pose.pose.pose.position.x + 1, 30), self.num_particles)
+        # x = x.reshape((self.num_particles, 1))
+        # #x = pose.pose.pose.position.x*np.ones(self.num_particles)
+        # y = np.random.choice(np.linspace(
+        #     pose.pose.pose.position.y - 1, pose.pose.pose.position.y + 1, 30), self.num_particles)
+        # y = y.reshape((self.num_particles, 1))
+        # #y = pose.pose.pose.position.y*np.ones(self.num_particles)
+        
+        # a,b,theta = euler_from_quaternion([pose.pose.pose.orientation.x, pose.pose.pose.orientation.y, pose.pose.pose.orientation.z, pose.pose.pose.orientation.w])
+        # thetas = np.random.choice(np.linspace(theta-np.pi/6, theta+np.pi/6, 300), 200)
+        # #thetas = theta*np.ones(self.num_particles)
+        # thetas = thetas.reshape((self.num_particles, 1))
 
-        thetas = np.random.choice(np.linspace(0, 2*np.pi, 300), 200)
-        thetas = thetas.reshape((self.num_particles, 1))
-
-        self.particles = np.hstack((x, y, thetas))
-        #print(self.particles)
+        # self.particles = np.hstack((x, y, thetas))
+        # print(self.particles.shape)
+        # rospy.loginfo('here')
+        # print(self.particles)
+        a,b,theta = euler_from_quaternion([pose.pose.pose.orientation.x, pose.pose.pose.orientation.y, pose.pose.pose.orientation.z, pose.pose.pose.orientation.w])
+        self.particles = np.ascontiguousarray(np.vstack([np.ones(self.num_particles)*pose.pose.pose.position.x,
+                                    np.ones(self.num_particles)*pose.pose.pose.position.y,
+                                    np.ones(self.num_particles)*theta,]).T)
+        print(self.particles.shape)
+        print('deterministic:', self.deterministic)
         self.particles_set = True
 
     # def scan_callback(self,scan):
@@ -182,13 +197,15 @@ class ParticleFilter:
         # self.laser_thread.start()
 
     def interpret_scan(self, scan):
+        if self.particles is None:
+            return
         # with self._lock:
         self.probs = self.sensor_model.evaluate(self.particles, np.array(scan.ranges))
         # normalizing here
         self.probs = np.divide(self.probs, np.sum(self.probs))
 
         # resampling based on computed probabilities
-
+        #print('interpret scan:', self.probs)
         self.particles = self.particles[np.random.choice(len(self.particles), len(self.particles), p=self.probs)]
         self.update_pose()
 
@@ -199,9 +216,17 @@ class ParticleFilter:
         # self.odom_thread.start()
 
     def interpret_odometry(self, odom):
+        if self.particles is None:
+            return
         # with self._lock:
         #quat = [odom.pose.pose.orientation.x,odom.pose.pose.orientation.y,odom.pose.pose.orientation.z, odom.pose.pose.orientation.w]
-        vector = [odom.twist.twist.linear.x, odom.twist.twist.linear.y, odom.twist.twist.angular.z]
+        if not self.prev_time:
+            dt = 0
+            self.prev_time = odom.header.stamp.to_sec()
+        else:
+            dt = odom.header.stamp.to_sec() - self.prev_time
+            self.prev_time = odom.header.stamp.to_sec()
+        vector = [odom.twist.twist.linear.x*dt, odom.twist.twist.linear.y*dt, odom.twist.twist.angular.z*dt]
         self.particles = self.motion_model.evaluate(self.particles, vector)
         self.update_pose()
 
