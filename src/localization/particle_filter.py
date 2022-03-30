@@ -33,11 +33,11 @@ class ParticleFilter:
         #     a twist component, you will only be provided with the
         #     twist component, so you should rely only on that
         #     information, and *not* use the pose component.
-        scan_topic = rospy.get_param("~scan_topic", "/scan")
+        #scan_topic = rospy.get_param("~scan_topic", "/scan")
         odom_topic = rospy.get_param("~odom_topic", "/odom")
-        self.laser_sub = rospy.Subscriber(scan_topic, LaserScan,
-                                          self.interpret_scan,
-                                          queue_size=1)
+        #self.laser_sub = rospy.Subscriber(scan_topic, LaserScan,
+                                    #      self.interpret_scan,
+                                     #     queue_size=1)
         self.odom_sub = rospy.Subscriber(odom_topic, Odometry,
                                          self.interpret_odometry,
                                          queue_size=1)
@@ -70,7 +70,7 @@ class ParticleFilter:
 
         # Initialize the models
         self.motion_model = MotionModel()
-        self.sensor_model = SensorModel()
+        #self.sensor_model = SensorModel()
         self.probs = None
         # Implement the MCL algorithm
         # using the sensor model and the motion model
@@ -96,30 +96,40 @@ class ParticleFilter:
                 Could also use a MSE regression which essentially finds modes of the distribution
                     Would be definitely more time intensive unless I find a way to use fast libraries
         '''
-        x = np.mean(self.particles[:, 0])
-        y = np.mean(self.particles[:, 1])
+        x = np.mean(self.particles[0, :])
+        y = np.mean(self.particles[1, :])
 
-        theta = circmean(self.particles[:, 2])
+        theta = circmean(self.particles[2, :])
 
-        n = self.particles.shape[1]
+        n = self.particles.shape[0]
+ 
         if not self.markers:
             self.markers = [0]*n
+        print(self.particles)
         for i in range(n):
-            pose = Marker()
+            pose = self.markers[i]
+            if not self.markers[i]:
+                pose = Marker()
             pose.header.frame_id = self.frame_id
             pose.type = Marker.CYLINDER
-            #pose.action = Marker.ADD
-            pose.scale.x = .5
-            pose.scale.y = .5
-            pose.scale.z = .5
+            pose.action = Marker.ADD
+            pose.scale.x = .1
+            pose.scale.y = .1
+            pose.scale.z = .1
             pose.color.a = 1.0
             pose.color.r = 1.0
             pose.color.g = .5
-            pose.pose.position.x = self.particles[i, 0]
-            pose.pose.position.y = self.particles[i, 1]
+            pose.pose.position.x = self.particles[i,0]
+            pose.pose.position.y = self.particles[i,1]
+            #print(pose.pose.position.x, pose.pose.position.y)
             pose.pose.position.z = 0
+            pose.header.stamp = rospy.Time.now()
             
-            ori = quaternion_from_euler(0.0,0.0,self.particles[i, 2])
+            ori = quaternion_from_euler(0.0,0.0,self.particles[i,2])
+
+            pose.pose.orientation.x = ori[0]
+            pose.pose.orientation.y = ori[1]
+            pose.pose.orientation.z = ori[2]
             pose.pose.orientation.w = ori[3]
 
             self.markers[i] = pose
@@ -127,7 +137,13 @@ class ParticleFilter:
         visualization = MarkerArray()
         visualization.markers = self.markers
 
-
+        
+        id = 0
+        for m in visualization.markers:
+            m.id = id
+            id += 1
+        
+        
         quaternion = quaternion_from_euler(0.0, 0.0, theta)
 
 
@@ -157,7 +173,7 @@ class ParticleFilter:
         thetas = thetas.reshape((self.num_particles, 1))
 
         self.particles = np.hstack((x, y, thetas))
-        print(self.particles)
+        #print(self.particles)
         self.particles_set = True
 
     # def scan_callback(self,scan):
@@ -175,7 +191,6 @@ class ParticleFilter:
         # resampling based on computed probabilities
 
         self.particles = self.particles[np.random.choice(len(self.particles), len(self.particles), p=self.probs)]
-        #print('scan:', len(np.unique(self.particles, axis=0)))
         self.update_pose()
 
     # def motion_callback(self,odom):
@@ -189,11 +204,10 @@ class ParticleFilter:
         #quat = [odom.pose.pose.orientation.x,odom.pose.pose.orientation.y,odom.pose.pose.orientation.z, odom.pose.pose.orientation.w]
         vector = [odom.twist.twist.linear.x, odom.twist.twist.linear.y, odom.twist.twist.angular.z]
         self.particles = self.motion_model.evaluate(self.particles, vector)
-        #print('odom:', len(self.particles))
         self.update_pose()
 
 if __name__ == "__main__":
     rospy.init_node("particle_filter")
     pf = ParticleFilter()
-    print(pf.particles)
+    #print(pf.particles)
     rospy.spin()

@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
-from scan_simulator_2d import PyScanSimulator2D
+from localization.scan_simulator_2d import PyScanSimulator2D
 
 import rospy
 import tf
