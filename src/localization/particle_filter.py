@@ -11,7 +11,7 @@ from tf.transformations import quaternion_from_euler, euler_from_quaternion, qua
 from visualization_msgs.msg import MarkerArray, Marker
 import numpy as np
 from scipy.stats import circmean
-# import threading
+import threading
 
 
 class ParticleFilter:
@@ -42,13 +42,13 @@ class ParticleFilter:
         scan_topic = rospy.get_param("~scan_topic", "/scan")
         odom_topic = rospy.get_param("~odom_topic", "/odom")
         self.laser_sub = rospy.Subscriber(scan_topic, LaserScan,
-                                         self.interpret_scan,
+                                         self.scan_callback,
                                         queue_size=1)
         self.odom_sub = rospy.Subscriber(odom_topic, Odometry,
-                                         self.interpret_odometry,
+                                         self.motion_callback,
                                          queue_size=1)
 
-        # self._lock = threading.Lock()
+        self._lock = threading.Lock()
         # self.odom_thread = None
         # self.laser_thread = None
 
@@ -160,7 +160,8 @@ class ParticleFilter:
         self.odom_estimate.pose.pose.position.z = 0.0
 
         self.odom_pub.publish(self.odom_estimate)
-        self.vis_pub.publish(visualization)
+        if self.vis_pub.get_num_connections() > 0:
+            self.vis_pub.publish(visualization)
 
     def initialize_particles(self, pose):
         # sample regions of the map that allow us to place points, then uniformly distribute with random thetas
@@ -190,45 +191,45 @@ class ParticleFilter:
         print('deterministic:', self.deterministic)
         self.particles_set = True
 
-    # def scan_callback(self,scan):
-        # if not self.particles_set:
-        #     return None
-        # self.laser_thread = threading.Thread(target=ParticleFilter.interpret_scan, name="Laser-Thread", args=(self,scan))
-        # self.laser_thread.start()
+    def scan_callback(self,scan):
+        if not self.particles_set:
+            return None
+        self.laser_thread = threading.Thread(target=ParticleFilter.interpret_scan, name="Laser-Thread", args=(self,scan))
+        self.laser_thread.start()
 
     def interpret_scan(self, scan):
         if self.particles is None:
             return
-        # with self._lock:
-        self.probs = self.sensor_model.evaluate(self.particles, np.array(scan.ranges))
-        # normalizing here
-        self.probs = np.divide(self.probs, np.sum(self.probs))
+        with self._lock:
+            self.probs = self.sensor_model.evaluate(self.particles, np.array(scan.ranges))
+            # normalizing here
+            self.probs = np.divide(self.probs, np.sum(self.probs))
 
-        # resampling based on computed probabilities
-        #print('interpret scan:', self.probs)
-        self.particles = self.particles[np.random.choice(len(self.particles), len(self.particles), p=self.probs)]
-        self.update_pose()
+            # resampling based on computed probabilities
+            #print('interpret scan:', self.probs)
+            self.particles = self.particles[np.random.choice(len(self.particles), len(self.particles), p=self.probs)]
+            self.update_pose()
 
-    # def motion_callback(self,odom):
-        # if not self.particles_set:
-        #     return None
-        # self.odom_thread = threading.Thread(target=ParticleFilter.interpret_odometry, name="Odom-Thread", args=(self,odom))
-        # self.odom_thread.start()
+    def motion_callback(self,odom):
+        if not self.particles_set:
+            return None
+        self.odom_thread = threading.Thread(target=ParticleFilter.interpret_odometry, name="Odom-Thread", args=(self,odom))
+        self.odom_thread.start()
 
     def interpret_odometry(self, odom):
         if self.particles is None:
             return
-        # with self._lock:
-        #quat = [odom.pose.pose.orientation.x,odom.pose.pose.orientation.y,odom.pose.pose.orientation.z, odom.pose.pose.orientation.w]
-        if not self.prev_time:
-            dt = 0
-            self.prev_time = odom.header.stamp.to_sec()
-        else:
-            dt = odom.header.stamp.to_sec() - self.prev_time
-            self.prev_time = odom.header.stamp.to_sec()
-        vector = [odom.twist.twist.linear.x*dt, odom.twist.twist.linear.y*dt, odom.twist.twist.angular.z*dt]
-        self.particles = self.motion_model.evaluate(self.particles, vector)
-        self.update_pose()
+        with self._lock:
+            #quat = [odom.pose.pose.orientation.x,odom.pose.pose.orientation.y,odom.pose.pose.orientation.z, odom.pose.pose.orientation.w]
+            if not self.prev_time:
+                dt = 0
+                self.prev_time = odom.header.stamp.to_sec()
+            else:
+                dt = odom.header.stamp.to_sec() - self.prev_time
+                self.prev_time = odom.header.stamp.to_sec()
+            vector = [odom.twist.twist.linear.x*dt, odom.twist.twist.linear.y*dt, odom.twist.twist.angular.z*dt]
+            self.particles = self.motion_model.evaluate(self.particles, vector)
+            self.update_pose()
 
 if __name__ == "__main__":
     rospy.init_node("particle_filter")
