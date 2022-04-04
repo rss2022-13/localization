@@ -164,28 +164,28 @@ class ParticleFilter:
 
     def initialize_particles(self, pose):
         # sample regions of the map that allow us to place points, then uniformly distribute with random thetas
-        # x = np.random.choice(np.linspace(
-        #     pose.pose.pose.position.x - 1, pose.pose.pose.position.x + 1, 30), self.num_particles)
-        # x = x.reshape((self.num_particles, 1))
+        x = np.random.choice(np.linspace(
+            pose.pose.pose.position.x - 1, pose.pose.pose.position.x + 1, 30), self.num_particles)
+        x = x.reshape((self.num_particles, 1))
         # #x = pose.pose.pose.position.x*np.ones(self.num_particles)
-        # y = np.random.choice(np.linspace(
-        #     pose.pose.pose.position.y - 1, pose.pose.pose.position.y + 1, 30), self.num_particles)
-        # y = y.reshape((self.num_particles, 1))
+        y = np.random.choice(np.linspace(
+            pose.pose.pose.position.y - 1, pose.pose.pose.position.y + 1, 30), self.num_particles)
+        y = y.reshape((self.num_particles, 1))
         # #y = pose.pose.pose.position.y*np.ones(self.num_particles)
         
-        # a,b,theta = euler_from_quaternion([pose.pose.pose.orientation.x, pose.pose.pose.orientation.y, pose.pose.pose.orientation.z, pose.pose.pose.orientation.w])
-        # thetas = np.random.choice(np.linspace(theta-np.pi/6, theta+np.pi/6, 300), 200)
+        a,b,theta = euler_from_quaternion([pose.pose.pose.orientation.x, pose.pose.pose.orientation.y, pose.pose.pose.orientation.z, pose.pose.pose.orientation.w])
+        thetas = np.random.choice(np.linspace(theta-np.pi/6, theta+np.pi/6, 300), self.num_particles)
         # #thetas = theta*np.ones(self.num_particles)
-        # thetas = thetas.reshape((self.num_particles, 1))
+        thetas = thetas.reshape((self.num_particles, 1))
 
-        # self.particles = np.hstack((x, y, thetas))
+        self.particles = np.hstack((x, y, thetas))
         # print(self.particles.shape)
         # rospy.loginfo('here')
         # print(self.particles)
-        a,b,theta = euler_from_quaternion([pose.pose.pose.orientation.x, pose.pose.pose.orientation.y, pose.pose.pose.orientation.z, pose.pose.pose.orientation.w])
-        self.particles = np.ascontiguousarray(np.vstack([np.ones(self.num_particles)*pose.pose.pose.position.x,
-                                    np.ones(self.num_particles)*pose.pose.pose.position.y,
-                                    np.ones(self.num_particles)*theta,]).T)
+        #a,b,theta = euler_from_quaternion([pose.pose.pose.orientation.x, pose.pose.pose.orientation.y, pose.pose.pose.orientation.z, pose.pose.pose.orientation.w])
+        #self.particles = np.ascontiguousarray(np.vstack([np.ones(self.num_particles)*pose.pose.pose.position.x,
+        #                            np.ones(self.num_particles)*pose.pose.pose.position.y,
+        #                            np.ones(self.num_particles)*theta,]).T)
         print(self.particles.shape)
         print('deterministic:', self.deterministic)
         self.particles_set = True
